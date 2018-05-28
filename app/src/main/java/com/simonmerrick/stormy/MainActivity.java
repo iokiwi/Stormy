@@ -111,14 +111,22 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
         return url;
     }
 
+    private void updateUILocation(Address address) {
+        final String locationString = formatLocationString(address);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                TextView locationValue = findViewById(R.id.locationValue);
+                locationValue.setText(locationString);
+            }
+        });
+    }
+
     private void getAddressFromLocation(final Location location) {
-
         HttpUrl geocodeUrl = getGeocodeUrl(location);
-
         if (isNetworkAvailable()) {
 
             OkHttpClient client = new OkHttpClient();
-
             Request request = new Request.Builder()
                     .url(geocodeUrl)
                     .build();
@@ -140,15 +148,7 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
                             address.setCountryName(addressData.getString("country"));
                             address.setCountryCode(addressData.getString("country_code"));
                             address.setSubAdminArea(addressData.getString("county"));
-                            final String locationString = address.getSubAdminArea() + ", " + address.getCountryCode().toUpperCase();
-                            runOnUiThread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    TextView locationValue = findViewById(R.id.locationValue);
-
-                                    locationValue.setText(locationString);
-                                }
-                            });
+                            updateUILocation(address);
                         }
                     } catch (IOException e) {
                         Log.e(TAG, "IO Exception caught: ", e);
@@ -160,7 +160,11 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
         }
     }
 
-     private void getForecast(final Location location) {
+    private String formatLocationString(Address address) {
+        return address.getSubAdminArea() + ", " + address.getCountryCode().toUpperCase();
+    }
+
+    private void getForecast(final Location location) {
         final ActivityMainBinding binding = DataBindingUtil.setContentView(MainActivity.this,
                 R.layout.activity_main);
 
@@ -185,7 +189,7 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
                 }
 
                 @Override
-                public void onResponse(Call call, Response response) throws IOException {
+                public void onResponse(Call call, Response response) {
                     try {
                         String jsonData = response.body().string();
                         if (response.isSuccessful()) {
@@ -193,7 +197,7 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
 
                             String locationString = "Get Location...";
                             if (address.getSubAdminArea() != null) {
-                                locationString = address.getSubLocality() + "," + address.getCountryCode().toUpperCase();
+                                locationString = formatLocationString(address);
                             }
 
                             final CurrentWeather displayWeather = new CurrentWeather(

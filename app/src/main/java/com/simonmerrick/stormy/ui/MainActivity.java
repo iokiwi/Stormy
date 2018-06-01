@@ -1,13 +1,11 @@
-package com.simonmerrick.stormy;
+package com.simonmerrick.stormy.ui;
 
-import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.databinding.DataBindingUtil;
 import android.graphics.drawable.Drawable;
 import android.location.Address;
 import android.location.Location;
-import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Bundle;
@@ -20,12 +18,19 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.simonmerrick.stormy.R;
 import com.simonmerrick.stormy.databinding.ActivityMainBinding;
+import com.simonmerrick.stormy.weather.Current;
+import com.simonmerrick.stormy.weather.Day;
+import com.simonmerrick.stormy.weather.Forecast;
+import com.simonmerrick.stormy.weather.Hour;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Locale;
 
 import okhttp3.Call;
@@ -39,50 +44,41 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
 
     public static final String TAG = MainActivity.class.getSimpleName();
 
-    private CurrentWeather currentWeather;
+    private Forecast forecast;
     private ImageView iconImageView;
     private Location location;
+    private double latitude = -41.281890;
+    private double longitude = 174.754971;
     private Address address = new Address(Locale.getDefault());
-
-
     private final String apiKey = "ecfb0eca95bf23229994fca6282936a7";
     private final String units = "ca";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getLocation();
-
+        getLocationForecast();
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults){
         if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            setLocation();
-            getForecast(location);
-            getAddressFromLocation(location);
+            getLocationForecast();
         }
     }
 
-    private void setLocation() {
-        LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+    private void getLocationForecast() {
+        location = new Location("");
+        location.setLatitude(latitude);
+        location.setLongitude(longitude);
         getForecast(location);
-        getAddressFromLocation(location);
-    }
-
-    private void getLocation() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+        /*if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // Request Location Permissions
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, PackageManager.PERMISSION_GRANTED);
         } else {
-            // TODO: Already have permission
-            setLocation();
+            LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+            location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
             getForecast(location);
-            getAddressFromLocation(location);
-        }
-
+        }*/
     }
 
     private HttpUrl getForecastUrl(String apiKey, Location location, String units) {
@@ -122,7 +118,7 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
         });
     }
 
-    private void getAddressFromLocation(final Location location) {
+    private void getAddressFromLocation(Location location) {
         HttpUrl geocodeUrl = getGeocodeUrl(location);
         if (isNetworkAvailable()) {
 
@@ -132,6 +128,7 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
                     .build();
 
             client.newCall(request).enqueue(new Callback() {
+
                 @Override
                 public void onFailure(Call call, IOException e) {
                     e.printStackTrace();
@@ -160,20 +157,15 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
         }
     }
 
-    private String formatLocationString(Address address) {
-        return address.getSubAdminArea() + ", " + address.getCountryCode().toUpperCase();
-    }
-
-    private void getForecast(final Location location) {
+    private void getForecast(Location l) {
         final ActivityMainBinding binding = DataBindingUtil.setContentView(MainActivity.this,
                 R.layout.activity_main);
 
         TextView darkSky = findViewById(R.id.darkSkyAttributuion);
         darkSky.setMovementMethod(LinkMovementMethod.getInstance());
-
         iconImageView = findViewById(R.id.iconImageView);
 
-        HttpUrl forecastURL = getForecastUrl(apiKey, location, units);
+        final HttpUrl forecastURL = getForecastUrl(apiKey, l, units);
 
         if (isNetworkAvailable()) {
             OkHttpClient client = new OkHttpClient();
@@ -193,22 +185,23 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
                     try {
                         String jsonData = response.body().string();
                         if (response.isSuccessful()) {
-                            currentWeather = getCurrentDetails(jsonData);
+                            forecast = parseForecastDetails(jsonData);
+                            Current current = forecast.getCurrent();
 
-                            String locationString = "Get Location...";
+                            String locationString = "Getting Location...";
                             if (address.getSubAdminArea() != null) {
                                 locationString = formatLocationString(address);
                             }
 
-                            final CurrentWeather displayWeather = new CurrentWeather(
+                            final Current displayWeather = new Current(
                                     locationString,
-                                    currentWeather.getIcon(),
-                                    currentWeather.getTime(),
-                                    currentWeather.getTemperature(),
-                                    currentWeather.getHumidity(),
-                                    currentWeather.getPrecipChance(),
-                                    currentWeather.getSummary(),
-                                    currentWeather.getTimeZone()
+                                    current.getIcon(),
+                                    current.getTime(),
+                                    current.getTemperature(),
+                                    current.getHumidity(),
+                                    current.getPrecipChance(),
+                                    current.getSummary(),
+                                    current.getTimeZone()
                             );
 
                             binding.setWeather(displayWeather);
@@ -233,20 +226,77 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
         }
     }
 
-    private CurrentWeather getCurrentDetails(String jsonData) throws JSONException {
+    private Day[] getDailyForecast(String jsonData) throws JSONException {
         JSONObject forecast = new JSONObject(jsonData);
         String timezone = forecast.getString("timezone");
-        JSONObject currently = forecast.getJSONObject("currently");
-        currentWeather = new CurrentWeather();
-        currentWeather.setHumidity(currently.getDouble("humidity"));
-        currentWeather.setTime(currently.getLong("time"));
-        currentWeather.setIcon(currently.getString("icon"));
-        currentWeather.setLocationLabel("Wellington, NZ");
-        currentWeather.setPrecipChance(currently.getDouble("precipProbability"));
-        currentWeather.setSummary(currently.getString("summary"));
-        currentWeather.setTemperature(currently.getDouble("temperature"));
-        currentWeather.setTimeZone(timezone);
-        return currentWeather;
+        JSONObject daily = forecast.getJSONObject("daily");
+        JSONArray data = daily.getJSONArray("data");
+        ArrayList<Day> days = new ArrayList<>();
+
+        for (int i = 0; i < data.length(); i++) {
+            JSONObject jsonDay = data.getJSONObject(i);
+            Day day = new Day();
+            day.setIcon(jsonDay.getString("icon"));
+            day.setSummary(jsonDay.getString("summary"));
+            day.setTime(jsonDay.getLong("time"));
+            day.setTemperatureMax(jsonDay.getDouble("temperatureHigh"));
+            day.setTemperatureMin(jsonDay.getDouble("temperatureLow"));
+            day.setTimezone(timezone);
+            days.add(day);
+        }
+
+        return days.toArray(new Day[data.length()]);
+    }
+
+    private Hour[] getHourlyForecast(String jsonData) throws JSONException {
+        JSONObject forecast = new JSONObject(jsonData);
+        String timezone = forecast.getString("timezone");
+        JSONObject hourly = forecast.getJSONObject("hourly");
+        JSONArray data = hourly.getJSONArray("data");
+        ArrayList<Hour> hours = new ArrayList<>();
+
+        for (int i = 0; i < data.length(); i++) {
+            JSONObject jsonHour = data.getJSONObject(i);
+            Hour h = new Hour();
+            h.setIcon(jsonHour.getString("icon"));
+            h.setSummary(jsonHour.getString("summary"));
+            h.setTime(jsonHour.getLong("time"));
+            h.setTemperature(jsonHour.getDouble("temperature"));
+            h.setTimezone(timezone);
+            hours.add(h);
+        }
+        return hours.toArray(new Hour[data.length()]);
+    }
+
+    private Forecast parseForecastDetails(String jsonData) throws JSONException {
+        Forecast forecast = new Forecast();
+        forecast.setCurrent(getCurrentDetails(jsonData));
+        forecast.setHourlyForecast(getHourlyForecast(jsonData));
+        forecast.setDailyForecast(getDailyForecast(jsonData));
+        return forecast;
+    }
+
+    /**
+     * @param jsonData JSON string representation of a forecast
+     * @return         an object representation of the current weather
+     * @exception JSONException If there is a key error retrieving values from json
+     * */
+    private Current getCurrentDetails(String jsonData) throws JSONException {
+
+        JSONObject forecastJSON = new JSONObject(jsonData);
+        String timezone = forecastJSON.getString("timezone");
+        JSONObject currently = forecastJSON.getJSONObject("currently");
+
+        Current current = new Current();
+        current.setHumidity(currently.getDouble("humidity"));
+        current.setTime(currently.getLong("time"));
+        current.setIcon(currently.getString("icon"));
+        current.setLocationLabel("Wellington, NZ");
+        current.setPrecipChance(currently.getDouble("precipProbability"));
+        current.setSummary(currently.getString("summary"));
+        current.setTemperature(currently.getDouble("temperature"));
+        current.setTimeZone(timezone);
+        return current;
     }
 
     private boolean isNetworkAvailable() {
@@ -262,6 +312,10 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
         return isAvailable;
     }
 
+    private String formatLocationString(Address address) {
+        return address.getSubAdminArea() + ", " + address.getCountryCode().toUpperCase();
+    }
+
     private void alertUserAboutError() {
         AlertDialogFragment dialog = new AlertDialogFragment();
         dialog.show(getFragmentManager(), "error_dialog");
@@ -269,7 +323,6 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
 
     public void refreshOnClick(View view) {
         Toast.makeText(this, "Refreshing Data", Toast.LENGTH_LONG).show();
-        getAddressFromLocation(location);
         getForecast(location);
     }
 }

@@ -4,5 +4,8 @@
     <color name="colorPrimaryDark">#303F9F</color>
     <color name="colorAccent">#FF4081</color>
     <color name="appBackground">#0073d2</color>
+    <color name="appBackgroundGradientLight">#f9d34c</color>
+    <color name="appBackgroundGradientDark">#f25019</color>
     <color name="half_white">#80ffffff</color>
+    <color name="buttonBackground">#40ffffff</color>
 </resources>

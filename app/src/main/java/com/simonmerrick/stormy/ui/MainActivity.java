@@ -1,6 +1,7 @@
 package com.simonmerrick.stormy.ui;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.databinding.DataBindingUtil;
 import android.graphics.drawable.Drawable;
@@ -324,5 +325,10 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
     public void refreshOnClick(View view) {
         Toast.makeText(this, "Refreshing Data", Toast.LENGTH_LONG).show();
         getForecast(location);
+    }
+
+    public void dailyOnClick(View view) {
+        Intent intent = new Intent(this, DailyForecastActivity.class);
+        startActivity(intent);
     }
 }

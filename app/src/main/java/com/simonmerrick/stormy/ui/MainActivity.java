@@ -44,15 +44,15 @@ import okhttp3.Response;
 public class MainActivity extends AppCompatActivity implements ActivityCompat.OnRequestPermissionsResultCallback {
 
     public static final String TAG = MainActivity.class.getSimpleName();
+    public static final String DAILY_FORECAST = "DAILY_FORECAST";
+
+    private final String apiKey = "ecfb0eca95bf23229994fca6282936a7";
+    private final String units = "ca";
 
     private Forecast forecast;
     private ImageView iconImageView;
     private Location location;
-    private double latitude = -41.281890;
-    private double longitude = 174.754971;
     private Address address = new Address(Locale.getDefault());
-    private final String apiKey = "ecfb0eca95bf23229994fca6282936a7";
-    private final String units = "ca";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,10 +68,13 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
     }
 
     private void getLocationForecast() {
+        double latitude = -41.281890;
+        double longitude = 174.754971;
         location = new Location("");
         location.setLatitude(latitude);
         location.setLongitude(longitude);
         getForecast(location);
+
         /*if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, PackageManager.PERMISSION_GRANTED);
@@ -80,32 +83,6 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
             location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
             getForecast(location);
         }*/
-    }
-
-    private HttpUrl getForecastUrl(String apiKey, Location location, String units) {
-        String locationPair = location.getLatitude() + "," + location.getLongitude();
-        HttpUrl url = new HttpUrl.Builder()
-                .scheme("https")
-                .host("api.darksky.net")
-                .addPathSegment("forecast")
-                .addPathSegment(apiKey)
-                .addPathSegment(locationPair)
-                .addQueryParameter("units", units)
-                .build();
-        return url;
-    }
-
-    private HttpUrl getGeocodeUrl(Location location) {
-        HttpUrl url = new HttpUrl.Builder()
-                .scheme("https")
-                .host("nominatim.openstreetmap.org")
-                .addPathSegment("reverse")
-                .addQueryParameter("format","json")
-                .addQueryParameter("lat", Double.toString(location.getLatitude()))
-                .addQueryParameter("lon", Double.toString(location.getLongitude()))
-                .addQueryParameter("addressdetails", "1")
-                .build();
-        return url;
     }
 
     private void updateUILocation(Address address) {
@@ -227,6 +204,24 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
         }
     }
 
+    private Current getCurrentDetails(String jsonData) throws JSONException {
+
+        JSONObject forecastJSON = new JSONObject(jsonData);
+        String timezone = forecastJSON.getString("timezone");
+        JSONObject currently = forecastJSON.getJSONObject("currently");
+
+        Current current = new Current();
+        current.setHumidity(currently.getDouble("humidity"));
+        current.setTime(currently.getLong("time"));
+        current.setIcon(currently.getString("icon"));
+        current.setLocationLabel("Wellington, NZ");
+        current.setPrecipChance(currently.getDouble("precipProbability"));
+        current.setSummary(currently.getString("summary"));
+        current.setTemperature(currently.getDouble("temperature"));
+        current.setTimeZone(timezone);
+        return current;
+    }
+
     private Day[] getDailyForecast(String jsonData) throws JSONException {
         JSONObject forecast = new JSONObject(jsonData);
         String timezone = forecast.getString("timezone");
@@ -241,7 +236,6 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
             day.setSummary(jsonDay.getString("summary"));
             day.setTime(jsonDay.getLong("time"));
             day.setTemperatureMax(jsonDay.getDouble("temperatureHigh"));
-            day.setTemperatureMin(jsonDay.getDouble("temperatureLow"));
             day.setTimezone(timezone);
             days.add(day);
         }
@@ -277,28 +271,9 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
         return forecast;
     }
 
-    /**
-     * @param jsonData JSON string representation of a forecast
-     * @return         an object representation of the current weather
-     * @exception JSONException If there is a key error retrieving values from json
-     * */
-    private Current getCurrentDetails(String jsonData) throws JSONException {
-
-        JSONObject forecastJSON = new JSONObject(jsonData);
-        String timezone = forecastJSON.getString("timezone");
-        JSONObject currently = forecastJSON.getJSONObject("currently");
-
-        Current current = new Current();
-        current.setHumidity(currently.getDouble("humidity"));
-        current.setTime(currently.getLong("time"));
-        current.setIcon(currently.getString("icon"));
-        current.setLocationLabel("Wellington, NZ");
-        current.setPrecipChance(currently.getDouble("precipProbability"));
-        current.setSummary(currently.getString("summary"));
-        current.setTemperature(currently.getDouble("temperature"));
-        current.setTimeZone(timezone);
-        return current;
-    }
+    /**************************************************
+     * Helpers
+     **************************************************/
 
     private boolean isNetworkAvailable() {
         ConnectivityManager manager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -322,6 +297,35 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
         dialog.show(getFragmentManager(), "error_dialog");
     }
 
+    private HttpUrl getForecastUrl(String apiKey, Location location, String units) {
+        String locationPair = location.getLatitude() + "," + location.getLongitude();
+        HttpUrl url = new HttpUrl.Builder()
+                .scheme("https")
+                .host("api.darksky.net")
+                .addPathSegment("forecast")
+                .addPathSegment(apiKey)
+                .addPathSegment(locationPair)
+                .addQueryParameter("units", units)
+                .build();
+        return url;
+    }
+
+    private HttpUrl getGeocodeUrl(Location location) {
+        HttpUrl url = new HttpUrl.Builder()
+                .scheme("https")
+                .host("nominatim.openstreetmap.org")
+                .addPathSegment("reverse")
+                .addQueryParameter("format","json")
+                .addQueryParameter("lat", Double.toString(location.getLatitude()))
+                .addQueryParameter("lon", Double.toString(location.getLongitude()))
+                .addQueryParameter("addressdetails", "1")
+                .build();
+        return url;
+    }
+
+    /**************************************************
+     * Listeners
+     **************************************************/
     public void refreshOnClick(View view) {
         Toast.makeText(this, "Refreshing Data", Toast.LENGTH_LONG).show();
         getForecast(location);
@@ -329,6 +333,7 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
 
     public void dailyOnClick(View view) {
         Intent intent = new Intent(this, DailyForecastActivity.class);
+        intent.putExtra(DAILY_FORECAST, forecast.getDailyForecast());
         startActivity(intent);
     }
 }
